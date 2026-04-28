@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <title>Soldier Ops 3D - Ultimate Edition</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            margin: 0; overflow: hidden; background: #000; 
+            font-family: 'Arial', sans-serif; 
+        }
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #1a1a2e 0%, #0f0f1a 100%);
+            display: flex; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .menu-box {
+            background: rgba(20, 20, 35, 0.95); 
+            padding: 40px; border-radius: 15px;
+            border: 2px solid #00aaff; text-align: center; color: white; width: 320px;
+            backdrop-filter: blur(10px);
+        }
+        input { 
+            width: 100%; padding: 15px; margin: 15px 0; 
+            background: rgba(10,10,20,0.8); border: 2px solid #333; 
+            color: #fff; border-radius: 8px; font-size: 16px;
+        }
+        button { 
+            width: 100%; padding: 15px; 
+            background: linear-gradient(45deg, #00aaff, #0088cc); 
+            border: none; color: white; font-weight: bold; cursor: pointer; 
+            margin: 10px 0; border-radius: 8px; transition: all 0.3s;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,170,255,0.4); }
+        button.secondary { background: #444; }
+        
+        #game-ui { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
+        #info { position: absolute; top: 20px; left: 20px; color: white; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px; font-size: 14px; }
+        #score-display { position: absolute; top: 20px; right: 20px; color: #00aaff; font-size: 28px; font-weight: bold; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px; }
+        #crosshair { 
+            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; 
+            border: 2px solid #00ff00; border-radius: 50%; transform: translate(-50%, -50%); opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="overlay">
+        <div class="menu-box">
+            <h1>🎖️ SOLDIER OPS</h1>
+            <input type="text" id="username" placeholder="Nome do Agente" maxlength="12">
+            <button onclick="startGame()">🚀 INICIAR MISSÃO</button>
+            <button class="secondary" onclick="showRank()">🏆 RANKING</button>
+        </div>
+    </div>
+
+    <div id="game-ui" style="display: none;">
+        <div id="info">WASD: Mover | CLIQUE: Atirar</div>
+        <div id="score-display">Kills: 0</div>
+        <div id="crosshair"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/GLTFLoader.js"></script>
+
+    <script>
+        // === VARIÁVEIS GLOBAIS ===
+        let scene, camera, renderer, player, clock, mixer;
+        let gameRunning = false, enemiesKilled = 0;
+        let keys = {}, mouse = { x: 0, y: 0 };
+        let enemies = [], obstacles = [];
+        let lastSpawn = 0, username = '';
+
+        // Geometrias e Materiais Reutilizáveis (Otimização)
+        const enemyGeo = new THREE.BoxGeometry(3, 6, 3);
+        const enemyMat = new THREE.MeshLambertMaterial({ color: 0xff4444 });
+        const raycaster = new THREE.Raycaster();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050510);
+            scene.fog = new THREE.Fog(0x050510, 50, 250);
+            clock = new THREE.Clock();
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Luzes
+            scene.add(new THREE.AmbientLight(0x404040, 0.7));
+            const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+            sun.position.set(50, 100, 50);
+            sun.castShadow = true;
+            scene.add(sun);
+
+            // Chão
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(1000, 1000),
+                new THREE.MeshLambertMaterial({ color: 0x151525 })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            scene.add(new THREE.GridHelper(500, 50, 0x00aaff, 0x222233));
+
+            // Obstáculos (Cenário)
+            for (let i = 0; i < 20; i++) {
+                const h = 5 + Math.random() * 15;
+                const obs = new THREE.Mesh(
+                    new THREE.BoxGeometry(10, h, 10),
+                    new THREE.MeshLambertMaterial({ color: 0x2c3e50 })
+                );
+                obs.position.set((Math.random()-0.5)*300, h/2, (Math.random()-0.5)*300);
+                if(obs.position.length() < 40) obs.position.x += 50;
+                scene.add(obs);
+                obstacles.push(obs); // Para futuras colisões
+            }
+
+            // Player
+            player = new THREE.Group();
+            scene.add(player);
+
+            // Arma Simples (Cubo estendido)
+            const gun = new THREE.Mesh(
+                new THREE.BoxGeometry(0.5, 0.5, 3),
+                new THREE.MeshLambertMaterial({ color: 0x111111 })
+            );
+            gun.position.set(1.5, 2.5, -2);
+            player.add(gun);
+
+            // Eventos
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+            window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+            renderer.domElement.addEventListener('mousedown', shoot);
+        }
+
+        function startGame() {
+            username = document.getElementById('username').value.trim() || "Recruta";
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'block';
+            renderer.domElement.requestPointerLock();
+            gameRunning = true;
+            animate();
+        }
+
+        function shoot() {
+            if (!gameRunning || document.pointerLockElement !== renderer.domElement) return;
+
+            // Raycasting do centro da tela
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(enemies);
+
+            if (intersects.length > 0) {
+                const target = intersects[0].object;
+                scene.remove(target);
+                enemies = enemies.filter(e => e !== target);
+                enemiesKilled++;
+                document.getElementById('score-display').textContent = `Kills: ${enemiesKilled}`;
+            }
+        }
+
+        function spawnEnemy(delta) {
+            lastSpawn += delta;
+            if (lastSpawn > 2.0) {
+                const enemy = new THREE.Mesh(enemyGeo, enemyMat);
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 100;
+                enemy.position.set(
+                    player.position.x + Math.cos(angle) * dist,
+                    3,
+                    player.position.z + Math.sin(angle) * dist
+                );
+                scene.add(enemy);
+                enemies.push(enemy);
+                lastSpawn = 0;
+            }
+        }
+
+        function animate() {
+            if (!gameRunning) return;
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            // Movimentação
+            const speed = 0.5;
+            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
+            const side = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
+
+            if (keys['w']) player.position.add(dir.multiplyScalar(speed));
+            if (keys['s']) player.position.add(dir.multiplyScalar(-speed));
+            if (keys['a']) player.position.add(side.multiplyScalar(-speed));
+            if (keys['d']) player.position.add(side.multiplyScalar(speed));
+
+            // Rotação (Mouse)
+            player.rotation.y -= mouse.x * 0.002;
+            camera.rotation.x -= mouse.y * 0.002;
+            camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+            mouse.x = 0; mouse.y = 0;
+
+            // Câmera segue o Player (FPS Style)
+            camera.position.copy(player.position);
+            camera.position.y += 4; // Altura dos olhos
+            camera.quaternion.copy(player.quaternion); 
+            // Aplica a inclinação vertical da câmera
+            camera.rotateX(Math.max(-Math.PI/4, Math.min(Math.PI/4, -mouse.y))); 
+
+            // Inimigos perseguem o jogador
+            enemies.forEach(en => {
+                const moveDir = new THREE.Vector3().subVectors(player.position, en.position).normalize();
+                en.position.x += moveDir.x * 0.2;
+                en.position.z += moveDir.z * 0.2;
+                
+                if(en.position.distanceTo(player.position) < 3) gameOver();
+            });
+
+            spawnEnemy(delta);
+            renderer.render(scene, camera);
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            alert(`MISSÃO ENCERRADA!\nAgente: ${username}\nAbates: ${enemiesKilled}`);
+            location.reload();
+        }
+
+        function onMouseMove(e) {
+            if (document.pointerLockElement === renderer.domElement) {
+                mouse.x = e.movementX;
+                mouse.y = e.movementY;
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        init();
+    </script>
+</body>
+</html>
