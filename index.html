@@ -2,81 +2,47 @@
 <html lang="pt-br">
 <head>
     <meta charset="utf-8">
-    <title>Soldier Ops 3D - Ultimate Edition</title>
+    <title>Soldier Ops 3D - Tactical Edition</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            margin: 0; overflow: hidden; background: #000; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-        }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
         .overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(circle, #1a1a2e 0%, #050505 100%);
-            display: flex; justify-content: center; align-items: center; z-index: 1000;
+            background: #000; display: flex; justify-content: center; align-items: center; z-index: 1000;
         }
         .menu-box {
-            background: rgba(20, 20, 35, 0.95); 
-            padding: 40px; border-radius: 15px;
-            border: 2px solid #00aaff; text-align: center; color: white; width: 350px;
-            box-shadow: 0 0 20px rgba(0, 170, 255, 0.2);
+            border: 2px solid #00ff00; padding: 40px; text-align: center; color: #00ff00; background: #050505;
         }
         input { 
-            width: 100%; padding: 15px; margin: 15px 0; 
-            background: rgba(0,0,0,0.5); border: 1px solid #00aaff; 
-            color: #fff; border-radius: 5px; font-size: 16px; outline: none;
+            width: 100%; padding: 10px; margin: 20px 0; background: #111; border: 1px solid #00ff00; 
+            color: #00ff00; outline: none;
         }
         button { 
-            width: 100%; padding: 15px; 
-            background: #00aaff; border: none; color: white; 
-            font-weight: bold; cursor: pointer; border-radius: 5px;
-            transition: 0.3s; margin-bottom: 10px;
+            width: 100%; padding: 15px; background: #00ff00; border: none; color: #000; 
+            font-weight: bold; cursor: pointer; text-transform: uppercase;
         }
-        button:hover { background: #0088cc; transform: scale(1.02); }
-        
         #game-ui { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; display: none; }
-        #hud { 
-            position: absolute; top: 20px; left: 20px; color: white; 
-            background: rgba(0,0,0,0.6); padding: 20px; border-radius: 5px; 
-            border-left: 5px solid #00aaff;
-        }
-        .stat-label { font-size: 12px; text-transform: uppercase; opacity: 0.8; }
-        .stat-value { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
-        #hp-bar-container { width: 200px; height: 10px; background: #333; margin-top: 5px; }
-        #hp-bar-fill { width: 100%; height: 100%; background: #ff4444; transition: 0.2s; }
-        
-        #crosshair { 
-            position: absolute; top: 50%; left: 50%; width: 25px; height: 25px; 
-            border: 2px solid rgba(0, 255, 0, 0.5); border-radius: 50%; 
-            transform: translate(-50%, -50%);
-        }
-        #damage-flash {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255, 0, 0, 0); pointer-events: none; z-index: 999;
-            transition: background 0.1s;
-        }
+        #hud { position: absolute; top: 20px; left: 20px; color: #00ff00; background: rgba(0,0,0,0.8); padding: 15px; border: 1px solid #00ff00; }
+        #hp-bar { width: 200px; height: 15px; border: 1px solid #00ff00; margin-top: 5px; }
+        #hp-fill { width: 100%; height: 100%; background: #00ff00; transition: 0.1s; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; border: 1px solid #00ff00; transform: translate(-50%, -50%); }
     </style>
 </head>
 <body>
 
-    <div id="damage-flash"></div>
-
     <div id="login-screen" class="overlay">
         <div class="menu-box">
-            <h1 style="letter-spacing: 2px;">SOLDIER OPS</h1>
-            <p style="font-size: 12px; color: #00aaff;">ULTIMATE EDITION</p>
-            <input type="text" id="username" placeholder="Codinome do Agente" maxlength="12">
-            <button onclick="startGame()">INICIAR MISSÃO</button>
+            <h1>[ SOLDIER_OPS_v2 ]</h1>
+            <input type="text" id="username" placeholder="IDENTIFICAÇÃO_AGENTE" maxlength="12">
+            <button onclick="startGame()">CONECTAR</button>
         </div>
     </div>
 
     <div id="game-ui">
         <div id="hud">
-            <div class="stat-label">Agente</div>
-            <div id="display-name" class="stat-value">---</div>
-            <div class="stat-label">Integridade</div>
-            <div id="hp-bar-container"><div id="hp-bar-fill"></div></div>
-            <div style="margin-top:15px;" class="stat-label">Abates Confirmados</div>
-            <div id="score-display" class="stat-value">0</div>
+            <div>STATUS: ATIVO</div>
+            <div id="hp-bar"><div id="hp-fill"></div></div>
+            <div style="margin-top:10px">KILLS: <span id="score-display">0</span></div>
         </div>
         <div id="crosshair"></div>
     </div>
@@ -87,90 +53,96 @@
         let scene, camera, renderer, player, clock;
         let gameRunning = false, enemiesKilled = 0, health = 100;
         let keys = {}, mouse = { x: 0, y: 0 };
-        let enemies = [], obstacles = [];
-        let lastSpawn = 0, username = '';
+        let enemies = [], walls = [];
+        let lastSpawn = 0;
+
+        const PLAYER_RADIUS = 1.5;
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x020205);
-            scene.fog = new THREE.Fog(0x020205, 30, 180);
+            scene.background = new THREE.Color(0x050505);
+            scene.fog = new THREE.Fog(0x050505, 10, 100);
             clock = new THREE.Clock();
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // Iluminação
             scene.add(new THREE.AmbientLight(0x404040, 0.5));
-            const mainLight = new THREE.PointLight(0x00aaff, 1, 200);
-            mainLight.position.set(0, 50, 0);
-            scene.add(mainLight);
+            const light = new THREE.PointLight(0x00ff00, 1, 100);
+            light.position.set(0, 20, 0);
+            scene.add(light);
 
-            // Chão Militar
-            const groundGeo = new THREE.PlaneGeometry(1000, 1000);
-            const groundMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
-            const ground = new THREE.Mesh(groundGeo, groundMat);
-            ground.rotation.x = -Math.PI / 2;
-            ground.receiveShadow = true;
-            scene.add(ground);
+            createTacticalMap();
 
-            const grid = new THREE.GridHelper(1000, 100, 0x00aaff, 0x222222);
-            scene.add(grid);
-
-            createMilitaryMap();
-
-            // Setup Player
             player = new THREE.Group();
+            player.position.set(0, 4, 0); // Começa no centro livre
             scene.add(player);
 
-            // Eventos
             window.addEventListener('resize', onWindowResize);
             document.addEventListener('mousemove', onMouseMove);
             window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
             window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
             renderer.domElement.addEventListener('mousedown', shoot);
-
-            renderer.render(scene, camera);
         }
 
-        function createMilitaryMap() {
-            const colors = [0x222222, 0x333333, 0x1a1a1a];
-            for (let i = 0; i < 60; i++) {
-                const h = 4 + Math.random() * 12;
-                const w = 6 + Math.random() * 10;
-                const d = 6 + Math.random() * 10;
-                
-                const box = new THREE.Mesh(
-                    new THREE.BoxGeometry(w, h, d),
-                    new THREE.MeshLambertMaterial({ color: colors[Math.floor(Math.random() * colors.length)] })
-                );
-                
-                const x = (Math.random() - 0.5) * 350;
-                const z = (Math.random() - 0.5) * 350;
-                
-                if (Math.abs(x) < 25 && Math.abs(z) < 25) continue;
-                
-                box.position.set(x, h/2, z);
-                box.castShadow = true;
-                box.receiveShadow = true;
-                scene.add(box);
-                obstacles.push(box);
+        function createTacticalMap() {
+            const wallMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+            const wallGeo = new THREE.BoxGeometry(1, 1, 1);
+
+            // Mapa em Grid (0 = vazio, 1 = parede)
+            const mapLayout = [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,0,1,0,1,1,1,1,1,0,1],
+                [1,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
+                [1,1,1,0,1,1,1,1,1,1,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,0,1,1,1,1,1,1,0,1],
+                [1,0,1,0,0,0,0,0,0,0,0,0,1,0,1],
+                [1,0,1,0,1,1,1,0,1,1,1,0,1,0,1],
+                [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ];
+
+            const cellSize = 20;
+            for(let z=0; z<mapLayout.length; z++) {
+                for(let x=0; x<mapLayout[z].length; x++) {
+                    if(mapLayout[z][x] === 1) {
+                        const wall = new THREE.Mesh(wallGeo, wallMat);
+                        wall.scale.set(cellSize, 15, cellSize);
+                        wall.position.set(
+                            x * cellSize - (mapLayout[z].length * cellSize)/2,
+                            7.5,
+                            z * cellSize - (mapLayout.length * cellSize)/2
+                        );
+                        scene.add(wall);
+                        // Criar Bounding Box para colisão
+                        const box = new THREE.Box3().setFromObject(wall);
+                        walls.push(box);
+                    }
+                }
             }
 
-            // Luzes de Alerta Vermelhas
-            for(let i=0; i<8; i++) {
-                const alertLight = new THREE.PointLight(0xff0000, 2, 60);
-                alertLight.position.set((Math.random()-0.5)*300, 15, (Math.random()-0.5)*300);
-                scene.add(alertLight);
+            // Chão
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshLambertMaterial({color: 0x0a0a0a}));
+            ground.rotation.x = -Math.PI/2;
+            scene.add(ground);
+        }
+
+        function checkCollision(newPos) {
+            const playerBox = new THREE.Box3().setFromCenterAndSize(
+                newPos, 
+                new THREE.Vector3(PLAYER_RADIUS, 5, PLAYER_RADIUS)
+            );
+            for(let wall of walls) {
+                if(playerBox.intersectsBox(wall)) return true;
             }
+            return false;
         }
 
         function startGame() {
-            username = document.getElementById('username').value.trim() || "Recruta";
-            document.getElementById('display-name').textContent = username;
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('game-ui').style.display = 'block';
             renderer.domElement.requestPointerLock();
@@ -178,86 +150,50 @@
             animate();
         }
 
-        function takeDamage(amt) {
-            health -= amt;
-            document.getElementById('hp-bar-fill').style.width = health + "%";
-            
-            const flash = document.getElementById('damage-flash');
-            flash.style.background = "rgba(255, 0, 0, 0.3)";
-            setTimeout(() => flash.style.background = "rgba(255, 0, 0, 0)", 100);
-
-            if (health <= 0) gameOver();
-        }
-
-        function shoot() {
-            if (!gameRunning || document.pointerLockElement !== renderer.domElement) return;
-
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-            const intersects = raycaster.intersectObjects(enemies);
-
-            if (intersects.length > 0) {
-                const target = intersects[0].object;
-                scene.remove(target);
-                enemies = enemies.filter(e => e !== target);
-                enemiesKilled++;
-                document.getElementById('score-display').textContent = enemiesKilled;
-            }
-        }
-
-        function spawnEnemy(delta) {
-            lastSpawn += delta;
-            if (lastSpawn > 1.5) {
-                const enemy = new THREE.Mesh(
-                    new THREE.BoxGeometry(3, 6, 3),
-                    new THREE.MeshLambertMaterial({ color: 0xff3333 })
-                );
-                const angle = Math.random() * Math.PI * 2;
-                const dist = 80;
-                enemy.position.set(
-                    player.position.x + Math.cos(angle) * dist,
-                    3,
-                    player.position.z + Math.sin(angle) * dist
-                );
-                scene.add(enemy);
-                enemies.push(enemy);
-                lastSpawn = 0;
-            }
-        }
-
         function animate() {
             if (!gameRunning) return;
             requestAnimationFrame(animate);
             const delta = clock.getDelta();
 
-            // Movimento
-            const speed = 0.6;
-            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
-            const side = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
+            const moveDir = new THREE.Vector3();
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
 
-            if (keys['w']) player.position.add(dir.multiplyScalar(speed));
-            if (keys['s']) player.position.add(dir.multiplyScalar(-speed));
-            if (keys['a']) player.position.add(side.multiplyScalar(-speed));
-            if (keys['d']) player.position.add(side.multiplyScalar(speed));
+            if (keys['w']) moveDir.add(forward);
+            if (keys['s']) moveDir.add(forward.clone().negate());
+            if (keys['a']) moveDir.add(right.clone().negate());
+            if (keys['d']) moveDir.add(right);
 
-            // Mouse Look
+            if (moveDir.length() > 0) {
+                moveDir.normalize().multiplyScalar(0.5);
+                const nextPos = player.position.clone().add(moveDir);
+                // Checagem de colisão antes de mover
+                if (!checkCollision(nextPos)) {
+                    player.position.copy(nextPos);
+                }
+            }
+
             player.rotation.y -= mouse.x * 0.002;
             camera.rotation.x -= mouse.y * 0.002;
             camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
             mouse.x = 0; mouse.y = 0;
 
             camera.position.copy(player.position);
-            camera.position.y += 4;
             camera.quaternion.copy(player.quaternion);
 
-            // IA dos Inimigos
-            enemies.forEach(en => {
-                const toPlayer = new THREE.Vector3().subVectors(player.position, en.position).normalize();
-                en.position.x += toPlayer.x * 0.3;
-                en.position.z += toPlayer.z * 0.3;
+            enemies.forEach((en, index) => {
+                const toP = new THREE.Vector3().subVectors(player.position, en.position).normalize();
+                const nextEPos = en.position.clone().add(toP.multiplyScalar(0.2));
                 
+                // Inimigos também respeitam as paredes!
+                if(!checkCollision(nextEPos)) {
+                    en.position.copy(nextEPos);
+                }
+
                 if(en.position.distanceTo(player.position) < 4) {
-                    takeDamage(0.5);
+                    health -= 0.5;
+                    document.getElementById('hp-fill').style.width = health + "%";
+                    if(health <= 0) location.reload();
                 }
             });
 
@@ -265,26 +201,33 @@
             renderer.render(scene, camera);
         }
 
-        function gameOver() {
-            gameRunning = false;
-            document.exitPointerLock();
-            alert(`MISSÃO FRACASSADA!\nAgente: ${username}\nAbates: ${enemiesKilled}`);
-            location.reload();
-        }
-
-        function onMouseMove(e) {
-            if (document.pointerLockElement === renderer.domElement) {
-                mouse.x = e.movementX;
-                mouse.y = e.movementY;
+        function spawnEnemy(delta) {
+            lastSpawn += delta;
+            if (lastSpawn > 2.0) {
+                const enemy = new THREE.Mesh(new THREE.BoxGeometry(3, 6, 3), new THREE.MeshLambertMaterial({color: 0xff0000}));
+                enemy.position.set((Math.random()-0.5)*100, 3, (Math.random()-0.5)*100);
+                if(!checkCollision(enemy.position)) {
+                    scene.add(enemy);
+                    enemies.push(enemy);
+                }
+                lastSpawn = 0;
             }
         }
 
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+        function shoot() {
+            const ray = new THREE.Raycaster();
+            ray.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const hits = ray.intersectObjects(enemies);
+            if (hits.length > 0) {
+                scene.remove(hits[0].object);
+                enemies = enemies.filter(e => e !== hits[0].object);
+                enemiesKilled++;
+                document.getElementById('score-display').innerText = enemiesKilled;
+            }
         }
 
+        function onMouseMove(e) { if (document.pointerLockElement) { mouse.x = e.movementX; mouse.y = e.movementY; } }
+        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
         window.onload = init;
     </script>
 </body>
